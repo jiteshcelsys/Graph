@@ -9,6 +9,7 @@ const path = require('path');
 const uploadRoutes = require('./routes/upload');
 const dbRoutes = require('./routes/database');
 const chartRoutes = require('./routes/chart');
+const analyticsRoutes = require('./routes/analytics');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -22,6 +23,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/api/upload', uploadRoutes);
 app.use('/api/db', dbRoutes);
 app.use('/api/charts', chartRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 

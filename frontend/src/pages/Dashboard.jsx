@@ -1,25 +1,29 @@
 import { useState, useEffect } from 'react';
-import { Table2, BarChart2, BookMarked, AlertCircle, Database, FileSpreadsheet } from 'lucide-react';
+import { Table2, BarChart2, BookMarked, Database, FileSpreadsheet, Loader2, AlertCircle, LayoutDashboard } from 'lucide-react';
 import DataTable from '../components/DataTable';
-import ChartBuilder from '../components/ChartBuilder';
-import ChartRenderer from '../components/ChartRenderer';
 import SavedCharts from '../components/SavedCharts';
+import KPICard from '../components/KPICard';
+import AutoChartGrid from '../components/AutoChartGrid';
+import InsightsPanel from '../components/InsightsPanel';
 import { useCharts } from '../hooks/useCharts';
+import { useAutoDashboard } from '../hooks/useAutoDashboard';
 
 const TABS = [
-  { id: 'data',  label: 'Data Preview',  Icon: Table2     },
-  { id: 'chart', label: 'Chart Builder', Icon: BarChart2  },
-  { id: 'saved', label: 'Saved Charts',  Icon: BookMarked },
+  { id: 'overview', label: 'Overview',     Icon: LayoutDashboard },
+  { id: 'data',     label: 'Data Preview', Icon: Table2          },
+  { id: 'saved',    label: 'Saved Charts', Icon: BookMarked      },
 ];
 
 export default function Dashboard({ dataset }) {
-  const [tab, setTab] = useState('data');
-  const { chartData, savedCharts, loading, error, generate, save, fetchSaved, remove } = useCharts();
+  const [tab, setTab] = useState('overview');
+  const { savedCharts, fetchSaved, remove } = useCharts();
+  const { result, loading, error, load } = useAutoDashboard();
 
   useEffect(() => {
     if (dataset?.datasetId) {
       fetchSaved(dataset.datasetId);
-      setTab('data');
+      setTab('overview');
+      load(dataset.datasetId);
     }
   }, [dataset?.datasetId]);
 
@@ -51,7 +55,7 @@ export default function Dashboard({ dataset }) {
   return (
     <div className="flex-1 flex flex-col min-h-0">
 
-      {/* Header */}
+      {/* Sticky header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800/80 bg-gray-950/60 backdrop-blur-sm sticky top-0 z-10">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-blue-950/60 border border-blue-900/50 flex items-center justify-center shrink-0">
@@ -80,9 +84,7 @@ export default function Dashboard({ dataset }) {
               key={id}
               onClick={() => setTab(id)}
               className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-lg font-medium transition-all whitespace-nowrap
-                ${tab === id
-                  ? 'bg-gray-700 text-gray-100 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-300'}`}
+                ${tab === id ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
             >
               <Icon className="w-3.5 h-3.5" />
               {label}
@@ -97,79 +99,58 @@ export default function Dashboard({ dataset }) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-5">
+      <div className="flex-1 overflow-auto p-5 space-y-5">
 
+        {/* ── OVERVIEW TAB ── */}
+        {tab === 'overview' && (
+          <>
+            {loading && (
+              <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+                <div className="text-center">
+                  <p className="text-sm font-medium text-gray-300">Analyzing your data…</p>
+                  <p className="text-xs text-gray-600 mt-0.5">Generating charts and AI insights</p>
+                </div>
+              </div>
+            )}
+
+            {error && !loading && (
+              <div className="flex items-center gap-2 text-red-400 text-sm bg-red-950/40 border border-red-900/50 rounded-xl p-4">
+                <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+              </div>
+            )}
+
+            {result && !loading && (
+              <>
+                {/* KPI Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {result.kpis.map((kpi, i) => (
+                    <KPICard key={i} kpi={kpi} index={i} />
+                  ))}
+                </div>
+
+                {/* Auto Charts */}
+                <AutoChartGrid charts={result.charts} />
+
+                {/* AI Insights + NL Query */}
+                <InsightsPanel
+                  datasetId={dataset.datasetId}
+                  summary={result.summary}
+                  insights={result.insights}
+                />
+              </>
+            )}
+          </>
+        )}
+
+        {/* ── DATA PREVIEW TAB ── */}
         {tab === 'data' && (
           <div className="card">
             <DataTable columns={dataset.columns} rows={dataset.preview} rowCount={dataset.rowCount} />
           </div>
         )}
 
-        {tab === 'chart' && (
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 h-full">
-
-            {/* Left — config panel */}
-            <div className="xl:col-span-2 card overflow-y-auto">
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-800">
-                <BarChart2 className="w-4 h-4 text-blue-400" />
-                <h2 className="text-sm font-semibold text-gray-200">Configure Chart</h2>
-              </div>
-              <ChartBuilder
-                dataset={dataset}
-                onGenerate={generate}
-                onSave={(payload) => save({
-                datasetId: payload.datasetId,
-                title: `${payload.type} — ${payload.xAxis} × ${payload.yAxis}`,
-                type: payload.type,
-                config: {
-                  xAxis: payload.xAxis,
-                  yAxis: payload.yAxis,
-                  aggregation: payload.aggregation,
-                  limit: payload.limit,
-                },
-              })}
-                loading={loading}
-              />
-            </div>
-
-            {/* Right — chart preview */}
-            <div className="xl:col-span-3 card flex flex-col">
-              <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-800">
-                <h2 className="text-sm font-semibold text-gray-200">
-                  {chartData
-                    ? `${chartData.type.charAt(0).toUpperCase() + chartData.type.slice(1)} — ${chartData.xAxis} × ${chartData.yAxis}`
-                    : 'Chart Preview'}
-                </h2>
-                {chartData && (
-                  <span className="text-xs text-gray-600">{chartData.data?.length} data points</span>
-                )}
-              </div>
-
-              {error && (
-                <div className="flex items-center gap-2 text-red-400 text-sm bg-red-950/40 border border-red-900/50 rounded-lg p-3 mb-4">
-                  <AlertCircle className="w-4 h-4 shrink-0" /> {error}
-                </div>
-              )}
-
-              {chartData ? (
-                <div className="flex-1 min-h-0">
-                  <ChartRenderer chartData={chartData} height={360} />
-                </div>
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center py-16">
-                  <div className="w-14 h-14 rounded-2xl bg-gray-800/60 border border-gray-700/50 flex items-center justify-center">
-                    <BarChart2 className="w-6 h-6 text-gray-700" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">No chart generated yet</p>
-                    <p className="text-xs text-gray-700 mt-0.5">Select axes and click Generate Chart</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
+        {/* ── SAVED CHARTS TAB ── */}
         {tab === 'saved' && (
           <div className="card">
             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-800">

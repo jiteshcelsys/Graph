@@ -16,24 +16,62 @@ const TOOLTIP_STYLE = {
   fontSize: 12,
 };
 
-function TickLabel({ x, y, payload }) {
+// For bar charts: rotate and truncate every label
+function BarTickLabel({ x, y, payload }) {
   return (
     <g transform={`translate(${x},${y})`}>
       <text x={0} y={0} dy={12} textAnchor="end" fill="#9ca3af" fontSize={11} transform="rotate(-35)">
-        {truncate(String(payload.value), 20)}
+        {truncate(String(payload.value), 18)}
       </text>
     </g>
   );
+}
+
+// For line charts: smart sparse labels — show max 8 evenly spaced
+function computeInterval(dataLength) {
+  if (dataLength <= 8) return 0;           // show all
+  return Math.ceil(dataLength / 8) - 1;   // show ~8 ticks
+}
+
+// Format a date/timestamp tick to a short readable form
+function formatDateTick(val) {
+  if (!val) return '';
+  // If it looks like a date string, format it
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+  }
+  return truncate(String(val), 12);
+}
+
+function LineTickLabel({ x, y, payload, isDate }) {
+  const label = isDate ? formatDateTick(payload.value) : truncate(String(payload.value), 12);
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={14} textAnchor="middle" fill="#9ca3af" fontSize={10}>
+        {label}
+      </text>
+    </g>
+  );
+}
+
+// Detect if the x values look like dates
+function looksLikeDates(data) {
+  if (!data?.length) return false;
+  const sample = data.slice(0, 5).map((d) => d.name);
+  return sample.every((v) => !isNaN(Date.parse(v)) && isNaN(Number(v)));
 }
 
 export default function ChartRenderer({ chartData, height = 340 }) {
   if (!chartData || !chartData.data?.length) return null;
 
   const { type, data, xAxis, yAxis } = chartData;
+  const isDate = looksLikeDates(data);
+  const lineInterval = computeInterval(data.length);
 
   const commonProps = {
     data,
-    margin: { top: 10, right: 20, left: 0, bottom: 60 },
+    margin: { top: 10, right: 20, left: 0, bottom: type === 'bar' ? 70 : 30 },
   };
 
   return (
@@ -42,19 +80,37 @@ export default function ChartRenderer({ chartData, height = 340 }) {
         {type === 'bar' ? (
           <BarChart {...commonProps}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <XAxis dataKey="name" tick={<TickLabel />} interval={0} />
+            <XAxis dataKey="name" tick={<BarTickLabel />} interval={0} />
             <YAxis tickFormatter={formatNumber} tick={{ fill: '#9ca3af', fontSize: 11 }} />
             <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [formatNumber(v), yAxis]} />
             <Bar dataKey="value" fill={COLORS[0]} radius={[4, 4, 0, 0]} />
           </BarChart>
+
         ) : type === 'line' ? (
           <LineChart {...commonProps}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <XAxis dataKey="name" tick={<TickLabel />} interval={0} />
+            <XAxis
+              dataKey="name"
+              interval={lineInterval}
+              tick={(props) => <LineTickLabel {...props} isDate={isDate} />}
+              tickLine={false}
+            />
             <YAxis tickFormatter={formatNumber} tick={{ fill: '#9ca3af', fontSize: 11 }} />
-            <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [formatNumber(v), yAxis]} />
-            <Line type="monotone" dataKey="value" stroke={COLORS[0]} strokeWidth={2} dot={{ r: 3, fill: COLORS[0] }} />
+            <Tooltip
+              contentStyle={TOOLTIP_STYLE}
+              labelFormatter={(v) => isDate ? new Date(v).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : v}
+              formatter={(v) => [formatNumber(v), yAxis]}
+            />
+            <Line
+              type="monotone"
+              dataKey="value"
+              stroke={COLORS[0]}
+              strokeWidth={2}
+              dot={data.length <= 30 ? { r: 3, fill: COLORS[0] } : false}
+              activeDot={{ r: 5 }}
+            />
           </LineChart>
+
         ) : (
           <PieChart>
             <Pie
