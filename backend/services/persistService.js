@@ -8,17 +8,34 @@ function getAppClient() {
   return new Client({ connectionString: process.env.DATABASE_URL });
 }
 
-// Sanitize dataset ID into a valid PG table name
-function tableNameFor(datasetId) {
+// Build a readable PG table name from the original file name
+// e.g. "sales data 2024.csv" → "sales_data_2024"
+function tableNameFor(datasetId, fileName) {
+  if (fileName) {
+    const base = fileName
+      .replace(/\.[^.]+$/, '')        // strip extension
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')   // non-alphanumeric → underscore
+      .replace(/^_+|_+$/g, '')       // trim leading/trailing underscores
+      .slice(0, 40);                  // max 40 chars to stay under PG limit
+    if (base) return base;
+  }
   return `ds_${datasetId.replace(/-/g, '_')}`;
 }
 
-async function persistRows(datasetId, columns, rows) {
+async function persistRows(datasetId, columns, rows, fileName) {
   if (!process.env.DATABASE_URL) return null;
 
   const client = getAppClient();
   await client.connect();
-  const tableName = tableNameFor(datasetId);
+
+  // If a table with this name already exists (same file uploaded again), append short id suffix
+  let tableName = tableNameFor(datasetId, fileName);
+  const exists = await client.query(
+    `SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1`,
+    [tableName]
+  );
+  if (exists.rows.length) tableName = `${tableName}_${datasetId.slice(0, 6)}`;
 
   try {
     // Build CREATE TABLE
@@ -82,3 +99,4 @@ function sanitizeCol(name) {
 }
 
 module.exports = { persistRows, fetchPersistedRows, dropPersistedTable, tableNameFor };
+

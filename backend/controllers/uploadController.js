@@ -22,7 +22,7 @@ async function uploadFile(req, res) {
 
   let tableName = null;
   try {
-    tableName = await persistRows(datasetId, columns, rows);
+    tableName = await persistRows(datasetId, columns, rows, req.file.originalname);
   } catch (e) {
     console.warn('Could not persist rows to DB:', e.message);
   }
