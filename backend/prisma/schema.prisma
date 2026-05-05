@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Dataset {
+  id          String   @id @default(uuid())
+  name        String
+  source      String   // "file" | "database"
+  columns     Json     // [{name, type}]
+  rowCount    Int
+  tableName   String?  // persisted PG table e.g. ds_<uuid>
+  createdAt   DateTime @default(now())
+  charts      Chart[]
+}
+
+model Chart {
+  id        String   @id @default(uuid())
+  datasetId String
+  title     String
+  type      String   // "bar" | "line" | "pie"
+  config    Json     // {xAxis, yAxis, filters}
+  createdAt DateTime @default(now())
+  dataset   Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+}
